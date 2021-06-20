@@ -26,7 +26,7 @@ import com.techshroom.petitioner.core.HttpResponse;
 import com.techshroom.petitioner.core.internal.PartialHttpResponse;
 import com.techshroom.petitioner.core.internal.ReadSessionHttpResponseBody;
 import com.techshroom.petitioner.core.internal.ResponseReadSession;
-import com.techshroom.petitioner.core.internal.SocketChannelReadSession;
+import com.techshroom.petitioner.core.internal.ByteChannelReadSession;
 import com.techshroom.petitioner.core.internal.codec.Decoder;
 import com.techshroom.petitioner.core.internal.codec.HttpCodec;
 import com.techshroom.petitioner.core.internal.parse.ContentTypeParser;
@@ -36,11 +36,8 @@ import com.techshroom.petitioner.core.io.ReadSession;
 import org.checkerframework.checker.nullness.qual.NonNull;
 
 import java.io.IOException;
-import java.io.UncheckedIOException;
-import java.net.InetSocketAddress;
 import java.nio.ByteBuffer;
-import java.nio.channels.AsynchronousChannelGroup;
-import java.nio.channels.AsynchronousSocketChannel;
+import java.nio.channels.AsynchronousByteChannel;
 import java.util.OptionalLong;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionStage;
@@ -52,16 +49,12 @@ import java.util.concurrent.TimeUnit;
  */
 public final class AsyncIoHttpClient implements HttpClient {
     private final ExecutorService workExecutor;
-    private final AsynchronousChannelGroup channelGroup;
+    private final UriConnector uriConnector;
     private final HttpCodec codec;
 
-    public AsyncIoHttpClient(ExecutorService workExecutor, HttpCodec codec) {
+    public AsyncIoHttpClient(ExecutorService workExecutor, UriConnector uriConnector, HttpCodec codec) {
         this.workExecutor = workExecutor;
-        try {
-            this.channelGroup = AsynchronousChannelGroup.withThreadPool(workExecutor);
-        } catch (IOException e) {
-            throw new UncheckedIOException("Failed to acquire channel group", e);
-        }
+        this.uriConnector = uriConnector;
         this.codec = codec;
     }
 
@@ -72,32 +65,16 @@ public final class AsyncIoHttpClient implements HttpClient {
         return sentFuture.thenCompose(this::readResponseHeader);
     }
 
-    private CompletableFuture<AsynchronousSocketChannel> initiateConnection(HttpRequest request) {
-        return FutureCompleter.newPromise(workExecutor, future -> {
-            var channel = AsynchronousSocketChannel.open(channelGroup);
-            var port = request.uri().getPort();
-            if (port == -1) {
-                port = switch (request.uri().getScheme()) {
-                    case "http" -> 80;
-                    case "https" -> 443;
-                    default -> throw new IllegalStateException("Invalid scheme: " + request.uri().getScheme());
-                };
-            }
-            var addr = new InetSocketAddress(request.uri().getHost(), port);
-            var connectFtr = Completables.<Void>wrap((a, h) ->
-                channel.connect(addr, a, h)
-            );
-            Completables.attachParent(connectFtr, future);
-            connectFtr.thenAccept(__ -> future.complete(channel));
-        });
+    private CompletableFuture<AsynchronousByteChannel> initiateConnection(HttpRequest request) {
+        return uriConnector.connect(request.uri());
     }
 
-    private CompletableFuture<AsynchronousSocketChannel> sendRequest(AsynchronousSocketChannel channel, HttpRequest request) {
+    private CompletableFuture<AsynchronousByteChannel> sendRequest(AsynchronousByteChannel channel, HttpRequest request) {
         return FutureCompleter.newPromise(workExecutor, new FutureCompleter<>() {
             private final ReadSession readSession = codec.requestEncoder().get().encode(request);
 
             @Override
-            public void complete(CompletableFuture<AsynchronousSocketChannel> future) {
+            public void complete(CompletableFuture<AsynchronousByteChannel> future) {
                 readSession.readNextPacket()
                     .thenCompose(buffer -> {
                         if (!buffer.hasRemaining()) {
@@ -122,10 +99,10 @@ public final class AsyncIoHttpClient implements HttpClient {
         });
     }
 
-    private CompletableFuture<AsynchronousSocketChannel> writeFully(AsynchronousSocketChannel channel, ByteBuffer buffer) {
+    private CompletableFuture<AsynchronousByteChannel> writeFully(AsynchronousByteChannel channel, ByteBuffer buffer) {
         return FutureCompleter.newPromise(workExecutor, new FutureCompleter<>() {
             @Override
-            public void complete(CompletableFuture<AsynchronousSocketChannel> fut) {
+            public void complete(CompletableFuture<AsynchronousByteChannel> fut) {
                 var writeFuture = Completables.<Integer>wrap((a, h) -> channel.write(buffer, a, h));
                 Completables.attachParent(writeFuture, fut);
                 writeFuture.thenAccept(__ -> {
@@ -141,9 +118,9 @@ public final class AsyncIoHttpClient implements HttpClient {
         });
     }
 
-    private CompletionStage<HttpResponse> readResponseHeader(AsynchronousSocketChannel channel) {
+    private CompletionStage<HttpResponse> readResponseHeader(AsynchronousByteChannel channel) {
         return FutureCompleter.newPromise(workExecutor, new FutureCompleter<>() {
-            private final ReadSession readSession = new SocketChannelReadSession(channel);
+            private final ReadSession readSession = new ByteChannelReadSession(channel);
             private final Decoder<@NonNull PartialHttpResponse> responseDecoder = codec.responseDecoder().get();
             private ByteBuffer previousUnread;
 
@@ -234,14 +211,7 @@ public final class AsyncIoHttpClient implements HttpClient {
     }
 
     @Override
-    public void close() {
-        this.channelGroup.shutdown();
-        try {
-            if (!this.channelGroup.awaitTermination(10, TimeUnit.SECONDS)) {
-                throw new RuntimeException("Failed to terminate channel group");
-            }
-        } catch (InterruptedException e) {
-            throw new IllegalStateException("Interrupted while awaiting termination");
-        }
+    public void close() throws IOException {
+        this.uriConnector.close();
     }
 }

@@ -32,7 +32,7 @@ import java.util.TreeMap;
 import java.util.stream.Collectors;
 
 /**
- * A wrapper for a {@link SortedMap} with case-insensitive {@link String} keys.
+ * A wrapper for a {@link SortedMap} with case-insensitive {@link String} names.
  */
 public class HttpHeaderMap implements Iterable<Map.Entry<String, String>> {
 
@@ -68,17 +68,17 @@ public class HttpHeaderMap implements Iterable<Map.Entry<String, String>> {
         private Builder() {
         }
 
-        public Builder put(String key, String value) {
-            return put(key, List.of(value));
+        public Builder put(String name, String value) {
+            return put(name, List.of(value));
         }
 
-        public Builder put(String key, List<String> value) {
-            headerMap.put(key, List.copyOf(value));
+        public Builder put(String name, List<String> value) {
+            headerMap.put(name, List.copyOf(value));
             return this;
         }
 
-        public Builder add(String key, String value) {
-            headerMap.compute(key, (k, oldValues) -> {
+        public Builder add(String name, String value) {
+            headerMap.compute(name, (k, oldValues) -> {
                 var values = oldValues == null
                     ? new String[1]
                     : oldValues.toArray(new String[oldValues.size() + 1]);
@@ -104,7 +104,7 @@ public class HttpHeaderMap implements Iterable<Map.Entry<String, String>> {
             }
             headerMap.forEach((k, value) -> {
                 if (!HttpEncoding.isValidName(k)) {
-                    throw new IllegalStateException("Invalid key/name provided: " + k);
+                    throw new IllegalStateException("Invalid name provided: " + k);
                 }
                 for (String v : value) {
                     if (!HttpEncoding.isValidValue(v)) {
@@ -123,62 +123,62 @@ public class HttpHeaderMap implements Iterable<Map.Entry<String, String>> {
     }
 
     /**
-     * Extracts either no value, or a single value, from the given header key.
+     * Extracts either no value, or a single value, from the given header name.
      *
-     * @param key the key to retrieve the value for
+     * @param name the name to retrieve the value for
      * @return the value, if there is one
      * @throws IllegalStateException if there is more than one value
      */
-    public @Nullable String value(String key) {
-        var values = headerMap.get(key);
+    public @Nullable String value(String name) {
+        var values = headerMap.get(name);
         if (values == null) {
             return null;
         }
         if (values.size() > 1) {
-            throw new IllegalStateException("More than one value for '" + key + "'");
+            throw new IllegalStateException("More than one value for '" + name + "'");
         }
         return values.get(0);
     }
 
     /**
-     * Extracts a single value from the given header key.
+     * Extracts a single value from the given header name.
      *
-     * @param key the key to retrieve the value for
+     * @param name the name to retrieve the value for
      * @return the value
      * @throws IllegalStateException if there is not exactly one value
      */
-    public String requireValue(String key) {
-        var value = value(key);
+    public String requireValue(String name) {
+        var value = value(name);
         if (value == null) {
-            throw new IllegalStateException("No value for '" + key + "'");
+            throw new IllegalStateException("No value for '" + name + "'");
         }
         return value;
     }
 
     /**
-     * Extracts all known values for the given key.
+     * Extracts all known values for the given name.
      *
-     * @param key the key to retrieve the value for
+     * @param name the name to retrieve the value for
      * @return the values, or an empty list if there is none
      */
-    public List<String> values(String key) {
+    public List<String> values(String name) {
         return Objects.requireNonNullElse(
-            headerMap.get(key),
+            headerMap.get(name),
             List.of()
         );
     }
 
     /**
-     * Extracts all known values for the given key, throwing if there are none.
+     * Extracts all known values for the given name, throwing if there are none.
      *
-     * @param key the key to retrieve the value for
+     * @param name the name to retrieve the value for
      * @return the values
      * @throws IllegalStateException if there are no values
      */
-    public List<String> requireValues(String key) {
-        var value = headerMap.get(key);
+    public List<String> requireValues(String name) {
+        var value = headerMap.get(name);
         if (value == null) {
-            throw new IllegalStateException("No value for '" + key + "'");
+            throw new IllegalStateException("No value for '" + name + "'");
         }
         return value;
     }

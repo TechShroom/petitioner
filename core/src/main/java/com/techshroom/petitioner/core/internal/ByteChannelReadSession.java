@@ -24,17 +24,17 @@ import org.checkerframework.checker.nullness.qual.NonNull;
 
 import java.io.IOException;
 import java.nio.ByteBuffer;
-import java.nio.channels.AsynchronousSocketChannel;
+import java.nio.channels.AsynchronousByteChannel;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionStage;
 import java.util.concurrent.Semaphore;
 
-public class SocketChannelReadSession implements ReadSession {
+public class ByteChannelReadSession implements ReadSession {
     private final Semaphore semaphore = new Semaphore(1);
     private final ByteBuffer readBuffer = ByteBuffer.allocateDirect(Constants.PACKET_SIZE);
-    private final AsynchronousSocketChannel channel;
+    private final AsynchronousByteChannel channel;
 
-    public SocketChannelReadSession(AsynchronousSocketChannel channel) {
+    public ByteChannelReadSession(AsynchronousByteChannel channel) {
         this.channel = channel;
     }
 

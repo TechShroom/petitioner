@@ -21,8 +21,12 @@ package com.techshroom.petitioner.core;
 import com.techshroom.petitioner.core.internal.Constants;
 import com.techshroom.petitioner.core.internal.codec.HttpCodec;
 import com.techshroom.petitioner.core.socket.AsyncIoHttpClient;
+import com.techshroom.petitioner.core.socket.DefaultUriConnector;
 
 import java.io.Closeable;
+import java.io.IOException;
+import java.io.UncheckedIOException;
+import java.nio.channels.AsynchronousChannelGroup;
 import java.util.concurrent.CompletionStage;
 import java.util.concurrent.ExecutorService;
 
@@ -49,7 +53,17 @@ public interface HttpClient extends Closeable {
         }
 
         public HttpClient build() {
-            return new AsyncIoHttpClient(executor, HttpCodec.forVersion(version));
+            AsynchronousChannelGroup group;
+            try {
+                group = AsynchronousChannelGroup.withThreadPool(executor);
+            } catch (IOException e) {
+                throw new UncheckedIOException(e);
+            }
+            return new AsyncIoHttpClient(
+                executor,
+                new DefaultUriConnector(executor, group),
+                HttpCodec.forVersion(version)
+            );
         }
     }
 

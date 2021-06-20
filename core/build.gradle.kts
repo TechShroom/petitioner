@@ -28,6 +28,12 @@ dependencies {
     testImplementation(libs.junit.jupiter.api)
     testRuntimeOnly(libs.junit.jupiter.engine)
 
+    testImplementation(platform(libs.jackson.bom))
+    testImplementation(libs.jackson.databind)
+
+    testImplementation(platform(libs.reactor.bom))
+    testImplementation(libs.reactor.core)
+
     testImplementation(libs.truth) {
         exclude(group = "junit")
     }

@@ -126,6 +126,10 @@ public class Http1RequestEncoder implements Encoder<HttpRequest> {
         if (path.isEmpty()) {
             path = "/";
         }
+        var query = uri.getRawQuery();
+        if (query != null && !query.isEmpty()) {
+            path += "?" + query;
+        }
         return StandardCharsets.UTF_8.encode(
             method.name() + " " + path + " HTTP/1.1\r\n"
         );
